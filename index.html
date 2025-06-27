@@ -1,0 +1,918 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive 3D Data Visualization</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            background: linear-gradient(135deg, #10101a 0%, #181828 100%);
+            overflow: hidden;
+            cursor: none;
+        }
+
+        #container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        #ui-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 100;
+        }
+
+        .title {
+            position: absolute;
+            top: 36px;
+            left: 40px;
+            color: #fff;
+            font-size: 2em;
+            font-weight: 400;
+            letter-spacing: 2px;
+            opacity: 0;
+            animation: fadeInUp 1.2s ease-out 0.3s forwards;
+            text-shadow: 0 2px 8px rgba(0,0,0,0.12);
+        }
+
+        .subtitle {
+            position: absolute;
+            top: 80px;
+            left: 40px;
+            color: #8ec6f8;
+            font-size: 1em;
+            font-weight: 300;
+            opacity: 0;
+            animation: fadeInUp 1.2s ease-out 0.6s forwards;
+            text-shadow: 0 1px 4px rgba(0,0,0,0.10);
+        }
+
+        .controls {
+            position: absolute;
+            bottom: 36px;
+            left: 40px;
+            display: flex;
+            gap: 12px;
+            pointer-events: all;
+        }
+
+        .control-btn {
+            padding: 8px 18px;
+            background: rgba(100, 181, 246, 0.07);
+            border: none;
+            color: #64b5f6;
+            font-family: inherit;
+            font-size: 14px;
+            border-radius: 18px;
+            cursor: pointer;
+            transition: background 0.2s, color 0.2s, box-shadow 0.2s;
+            font-weight: 400;
+            outline: none;
+            box-shadow: none;
+        }
+
+        .control-btn:hover, .control-btn.active {
+            background: rgba(100, 181, 246, 0.18);
+            color: #fff;
+        }
+
+        .data-panel {
+            position: absolute;
+            top: 36px;
+            right: 40px;
+            width: 200px;
+            background: rgba(20, 24, 38, 0.88);
+            border-radius: 12px;
+            padding: 18px;
+            color: #fff;
+            opacity: 0;
+            animation: fadeInRight 1.2s ease-out 1s forwards;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.10);
+            border: none;
+        }
+
+        .data-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            font-size: 13px;
+            font-weight: 300;
+        }
+
+        .data-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .data-value {
+            color: #8ec6f8;
+            font-weight: 500;
+        }
+
+        .custom-cursor {
+            position: fixed;
+            width: 16px;
+            height: 16px;
+            border: 1.5px solid #64b5f6;
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 9999;
+            mix-blend-mode: difference;
+            transition: transform 0.08s cubic-bezier(.4,0,.2,1);
+            background: transparent;
+        }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(18px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes fadeInRight {
+            from {
+                opacity: 0;
+                transform: translateX(18px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #8ec6f8;
+            font-size: 16px;
+            opacity: 1;
+            transition: opacity 0.7s;
+            background: rgba(20,24,38,0.85);
+            padding: 10px 24px;
+            border-radius: 10px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+        }
+
+        .loading.hidden {
+            opacity: 0;
+        }
+
+        .interaction-hints {
+            position: absolute;
+            bottom: 100px;
+            left: 40px;
+            color: rgba(142, 198, 248, 0.6);
+            font-size: 12px;
+            line-height: 1.4;
+            pointer-events: none;
+            opacity: 0;
+            animation: fadeInUp 1.2s ease-out 2s forwards;
+        }
+
+        .speed-control {
+            position: absolute;
+            bottom: 36px;
+            right: 40px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            pointer-events: all;
+            color: #8ec6f8;
+            font-size: 13px;
+        }
+
+        .speed-slider {
+            width: 80px;
+            height: 4px;
+            background: rgba(100, 181, 246, 0.2);
+            border-radius: 2px;
+            outline: none;
+            -webkit-appearance: none;
+        }
+
+        .speed-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #64b5f6;
+            cursor: pointer;
+        }
+
+        .theme-controls {
+            display: flex;
+            gap: 8px;
+            justify-content: center;
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            pointer-events: all;
+        }
+
+        .theme-btn {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            border: 2px solid rgba(255,255,255,0.3);
+            cursor: pointer;
+            transition: border-color 0.2s;
+        }
+
+        .theme-btn.active {
+            border-color: #fff;
+            box-shadow: 0 0 8px rgba(255,255,255,0.3);
+        }
+
+        .theme-blue { background: #64b5f6; }
+        .theme-purple { background: #9c27b0; }
+        .theme-green { background: #4caf50; }
+        .theme-orange { background: #ff9800; }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div class="loading" id="loading">Initializing Visualization...</div>
+        <div class="custom-cursor" id="cursor"></div>
+        
+        <div id="ui-overlay">
+            <div class="title">DATA NEXUS</div>
+            <div class="subtitle">Interactive 3D Visualization Experience</div>
+            
+            <div class="data-panel">
+                <div class="data-item">
+                    <span>Active Nodes:</span>
+                    <span class="data-value" id="nodeCount">0</span>
+                </div>
+                <div class="data-item">
+                    <span>Connections:</span>
+                    <span class="data-value" id="connectionCount">0</span>
+                </div>
+                <div class="data-item">
+                    <span>Data Flow:</span>
+                    <span class="data-value" id="dataFlow">0 MB/s</span>
+                </div>
+                <div class="data-item">
+                    <span>Network Load:</span>
+                    <span class="data-value" id="networkLoad">0%</span>
+                </div>
+                
+                <div class="theme-controls">
+                    <div class="theme-btn theme-blue active" data-theme="blue"></div>
+                    <div class="theme-btn theme-purple" data-theme="purple"></div>
+                    <div class="theme-btn theme-green" data-theme="green"></div>
+                    <div class="theme-btn theme-orange" data-theme="orange"></div>
+                </div>
+            </div>
+
+            <div class="controls">
+                <button class="control-btn active" id="waveBtn">Wave Field</button>
+                <button class="control-btn" id="particleBtn">Particle Storm</button>
+                <button class="control-btn" id="networkBtn">Neural Network</button>
+                <button class="control-btn" id="galaxyBtn">Data Galaxy</button>
+            </div>
+
+            <div class="speed-control">
+                <span>Speed:</span>
+                <input type="range" class="speed-slider" id="speedSlider" min="0.1" max="3" step="0.1" value="1">
+            </div>
+
+            <div class="interaction-hints">
+                Click & Drag: Rotate view<br>
+                Mouse Wheel: Zoom in/out<br>
+                Space: Auto-rotate toggle<br>
+                R: Reset view<br>
+                1-4: Quick mode switch
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class DataVisualization {
+            constructor() {
+                this.scene = new THREE.Scene();
+                this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+                this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+                this.mouse = new THREE.Vector2();
+                this.raycaster = new THREE.Raycaster();
+                this.time = 0;
+                this.currentMode = 'wave';
+                this.nodes = [];
+                this.connections = [];
+                this.autoRotate = false;
+                this.animationSpeed = 1;
+                this.isMouseDown = false;
+                this.mouseDownPosition = { x: 0, y: 0 };
+                this.cameraTarget = new THREE.Vector3(0, 0, 0);
+                this.currentTheme = 'blue';
+                this.themes = {
+                    blue: { primary: 0x64b5f6, secondary: 0x001122 },
+                    purple: { primary: 0x9c27b0, secondary: 0x1a0033 },
+                    green: { primary: 0x4caf50, secondary: 0x001100 },
+                    orange: { primary: 0xff9800, secondary: 0x331100 }
+                };
+                
+                this.init();
+                this.createWaveField();
+                this.setupEventListeners();
+                this.animate();
+                
+                setTimeout(() => {
+                    document.getElementById('loading').classList.add('hidden');
+                }, 2000);
+            }
+
+            init() {
+                this.renderer.setSize(window.innerWidth, window.innerHeight);
+                this.renderer.setClearColor(0x000000, 0);
+                this.renderer.setPixelRatio(window.devicePixelRatio);
+                document.getElementById('container').appendChild(this.renderer.domElement);
+
+                this.camera.position.set(0, 5, 10);
+                this.camera.lookAt(0, 0, 0);
+
+                // Lighting
+                const ambientLight = new THREE.AmbientLight(0x404040, 0.4);
+                this.scene.add(ambientLight);
+
+                const pointLight = new THREE.PointLight(0x64b5f6, 1, 100);
+                pointLight.position.set(10, 10, 10);
+                this.scene.add(pointLight);
+            }
+
+            createWaveField() {
+                this.clearScene();
+                
+                const geometry = new THREE.PlaneGeometry(20, 20, 50, 50);
+                const colors = this.themes[this.currentTheme];
+                
+                const material = new THREE.ShaderMaterial({
+                    uniforms: {
+                        time: { value: 0 },
+                        mouse: { value: new THREE.Vector2() },
+                        primaryColor: { value: new THREE.Color(colors.primary) },
+                        secondaryColor: { value: new THREE.Color(colors.secondary) }
+                    },
+                    vertexShader: `
+                        uniform float time;
+                        uniform vec2 mouse;
+                        varying vec3 vPosition;
+                        varying vec3 vNormal;
+                        
+                        void main() {
+                            vPosition = position;
+                            vNormal = normal;
+                            
+                            vec3 pos = position;
+                            float wave1 = sin(pos.x * 0.5 + time) * 0.5;
+                            float wave2 = sin(pos.y * 0.3 + time * 0.8) * 0.3;
+                            float wave3 = sin(distance(pos.xy, mouse * 10.0) * 0.8 - time * 2.0) * 0.4;
+                            
+                            pos.z += wave1 + wave2 + wave3;
+                            
+                            gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+                        }
+                    `,
+                    fragmentShader: `
+                        uniform float time;
+                        uniform vec3 primaryColor;
+                        uniform vec3 secondaryColor;
+                        varying vec3 vPosition;
+                        varying vec3 vNormal;
+                        
+                        void main() {
+                            float intensity = sin(vPosition.x * 0.5 + time) * 0.5 + 0.5;
+                            vec3 color = mix(secondaryColor, primaryColor, intensity);
+                            gl_FragColor = vec4(color, 0.8);
+                        }
+                    `,
+                    transparent: true,
+                    wireframe: true
+                });
+
+                this.waveMesh = new THREE.Mesh(geometry, material);
+                this.waveMesh.rotation.x = -Math.PI / 2;
+                this.scene.add(this.waveMesh);
+            }
+
+            createParticleStorm() {
+                this.clearScene();
+                
+                const particleCount = 5000;
+                const geometry = new THREE.BufferGeometry();
+                const positions = new Float32Array(particleCount * 3);
+                const colors = new Float32Array(particleCount * 3);
+                const sizes = new Float32Array(particleCount);
+                const themeColors = this.themes[this.currentTheme];
+                
+                // Convert hex colors to RGB values
+                const primaryColor = new THREE.Color(themeColors.primary);
+                const secondaryColor = new THREE.Color(themeColors.secondary);
+
+                for (let i = 0; i < particleCount; i++) {
+                    positions[i * 3] = (Math.random() - 0.5) * 50;
+                    positions[i * 3 + 1] = (Math.random() - 0.5) * 50;
+                    positions[i * 3 + 2] = (Math.random() - 0.5) * 50;
+
+                    const intensity = Math.random();
+                    const mixedColor = secondaryColor.clone().lerp(primaryColor, intensity);
+                    
+                    colors[i * 3] = mixedColor.r;
+                    colors[i * 3 + 1] = mixedColor.g;
+                    colors[i * 3 + 2] = mixedColor.b;
+
+                    sizes[i] = Math.random() * 3 + 1;
+                }
+
+                geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+                geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+                geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+
+                const material = new THREE.ShaderMaterial({
+                    uniforms: {
+                        time: { value: 0 }
+                    },
+                    vertexShader: `
+                        attribute float size;
+                        attribute vec3 color;
+                        uniform float time;
+                        varying vec3 vColor;
+                        
+                        void main() {
+                            vColor = color;
+                            vec3 pos = position;
+                            
+                            pos.x += sin(time + position.y * 0.01) * 2.0;
+                            pos.y += cos(time + position.x * 0.01) * 2.0;
+                            pos.z += sin(time + position.x * position.y * 0.0001) * 3.0;
+                            
+                            vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+                            gl_PointSize = size * (300.0 / -mvPosition.z);
+                            gl_Position = projectionMatrix * mvPosition;
+                        }
+                    `,
+                    fragmentShader: `
+                        varying vec3 vColor;
+                        
+                        void main() {
+                            float dist = distance(gl_PointCoord, vec2(0.5));
+                            if (dist > 0.5) discard;
+                            
+                            float alpha = 1.0 - dist * 2.0;
+                            gl_FragColor = vec4(vColor, alpha);
+                        }
+                    `,
+                    transparent: true
+                });
+
+                this.particleSystem = new THREE.Points(geometry, material);
+                this.scene.add(this.particleSystem);
+            }
+
+            createNeuralNetwork() {
+                this.clearScene();
+                this.nodes = [];
+                this.connections = [];
+
+                // Create nodes
+                const nodeCount = 50;
+                const nodeGeometry = new THREE.SphereGeometry(0.1, 8, 8);
+                const nodeMaterial = new THREE.MeshPhongMaterial({ 
+                    color: 0x64b5f6,
+                    emissive: 0x001122,
+                    transparent: true,
+                    opacity: 0.8
+                });
+
+                for (let i = 0; i < nodeCount; i++) {
+                    const node = new THREE.Mesh(nodeGeometry, nodeMaterial);
+                    node.position.set(
+                        (Math.random() - 0.5) * 20,
+                        (Math.random() - 0.5) * 20,
+                        (Math.random() - 0.5) * 20
+                    );
+                    this.nodes.push(node);
+                    this.scene.add(node);
+                }
+
+                // Create connections
+                const connectionGeometry = new THREE.BufferGeometry();
+                const positions = [];
+                
+                for (let i = 0; i < nodeCount; i++) {
+                    for (let j = i + 1; j < nodeCount; j++) {
+                        if (Math.random() > 0.85) {
+                            positions.push(
+                                this.nodes[i].position.x, this.nodes[i].position.y, this.nodes[i].position.z,
+                                this.nodes[j].position.x, this.nodes[j].position.y, this.nodes[j].position.z
+                            );
+                        }
+                    }
+                }
+
+                connectionGeometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+                const connectionMaterial = new THREE.LineBasicMaterial({ 
+                    color: 0x64b5f6, 
+                    transparent: true, 
+                    opacity: 0.3 
+                });
+                
+                this.networkLines = new THREE.LineSegments(connectionGeometry, connectionMaterial);
+                this.scene.add(this.networkLines);
+            }
+
+            createDataGalaxy() {
+                this.clearScene();
+                
+                const galaxyGeometry = new THREE.BufferGeometry();
+                const particleCount = 8000;
+                const positions = new Float32Array(particleCount * 3);
+                const colors = new Float32Array(particleCount * 3);
+                const themeColors = this.themes[this.currentTheme];
+                
+                // Convert hex colors to RGB values
+                const primaryColor = new THREE.Color(themeColors.primary);
+                const secondaryColor = new THREE.Color(themeColors.secondary);
+
+                for (let i = 0; i < particleCount; i++) {
+                    const radius = Math.random() * 15 + 2;
+                    const angle = Math.random() * Math.PI * 2;
+                    const height = (Math.random() - 0.5) * 2;
+                    
+                    positions[i * 3] = Math.cos(angle) * radius;
+                    positions[i * 3 + 1] = height;
+                    positions[i * 3 + 2] = Math.sin(angle) * radius;
+
+                    const colorIntensity = 1 - (radius / 17);
+                    // Mix between secondary and primary colors based on radius
+                    const mixedColor = secondaryColor.clone().lerp(primaryColor, colorIntensity);
+                    
+                    colors[i * 3] = mixedColor.r;
+                    colors[i * 3 + 1] = mixedColor.g;
+                    colors[i * 3 + 2] = mixedColor.b;
+                }
+
+                galaxyGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+                galaxyGeometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+                const galaxyMaterial = new THREE.PointsMaterial({
+                    size: 2,
+                    vertexColors: true,
+                    transparent: true,
+                    opacity: 0.8
+                });
+
+                this.galaxy = new THREE.Points(galaxyGeometry, galaxyMaterial);
+                this.scene.add(this.galaxy);
+            }
+
+            clearScene() {
+                while (this.scene.children.length > 2) { // Keep lights
+                    this.scene.remove(this.scene.children[2]);
+                }
+                this.nodes = [];
+                this.connections = [];
+            }
+
+            setupEventListeners() {
+                window.addEventListener('resize', () => this.onWindowResize());
+                window.addEventListener('mousemove', (e) => this.onMouseMove(e));
+                window.addEventListener('mousedown', (e) => this.onMouseDown(e));
+                window.addEventListener('mouseup', () => this.onMouseUp());
+                window.addEventListener('wheel', (e) => this.onMouseWheel(e));
+                window.addEventListener('keydown', (e) => this.onKeyDown(e));
+                window.addEventListener('click', (e) => this.onClick(e));
+                
+                // Custom cursor
+                const cursor = document.getElementById('cursor');
+                document.addEventListener('mousemove', (e) => {
+                    cursor.style.left = e.clientX - 8 + 'px';
+                    cursor.style.top = e.clientY - 8 + 'px';
+                });
+
+                // Control buttons
+                document.getElementById('waveBtn').addEventListener('click', () => this.switchMode('wave'));
+                document.getElementById('particleBtn').addEventListener('click', () => this.switchMode('particle'));
+                document.getElementById('networkBtn').addEventListener('click', () => this.switchMode('network'));
+                document.getElementById('galaxyBtn').addEventListener('click', () => this.switchMode('galaxy'));
+
+                // Speed control
+                document.getElementById('speedSlider').addEventListener('input', (e) => {
+                    this.animationSpeed = parseFloat(e.target.value);
+                });
+
+                // Theme controls
+                document.querySelectorAll('.theme-btn').forEach(btn => {
+                    btn.addEventListener('click', () => this.switchTheme(btn.dataset.theme));
+                });
+            }
+
+            onMouseDown(event) {
+                this.isMouseDown = true;
+                this.mouseDownPosition.x = event.clientX;
+                this.mouseDownPosition.y = event.clientY;
+            }
+
+            onMouseUp() {
+                this.isMouseDown = false;
+            }
+
+            onMouseWheel(event) {
+                event.preventDefault();
+                const zoomSpeed = 0.1;
+                const distance = this.camera.position.distanceTo(this.cameraTarget);
+                
+                if (event.deltaY > 0 && distance < 50) {
+                    this.camera.position.multiplyScalar(1 + zoomSpeed);
+                } else if (event.deltaY < 0 && distance > 2) {
+                    this.camera.position.multiplyScalar(1 - zoomSpeed);
+                }
+            }
+
+            onKeyDown(event) {
+                switch(event.code) {
+                    case 'Space':
+                        event.preventDefault();
+                        this.autoRotate = !this.autoRotate;
+                        break;
+                    case 'KeyR':
+                        this.resetCamera();
+                        break;
+                    case 'Digit1':
+                        this.switchMode('wave');
+                        break;
+                    case 'Digit2':
+                        this.switchMode('particle');
+                        break;
+                    case 'Digit3':
+                        this.switchMode('network');
+                        break;
+                    case 'Digit4':
+                        this.switchMode('galaxy');
+                        break;
+                }
+            }
+
+            onClick(event) {
+                if (event.target.closest('#ui-overlay')) return;
+                
+                this.raycaster.setFromCamera(this.mouse, this.camera);
+                
+                if (this.currentMode === 'network' && this.nodes.length > 0) {
+                    const intersects = this.raycaster.intersectObjects(this.nodes);
+                    if (intersects.length > 0) {
+                        const node = intersects[0].object;
+                        this.pulseNode(node);
+                    }
+                }
+            }
+
+            pulseNode(node) {
+                const originalScale = node.scale.clone();
+                const tl = {
+                    scale: 1,
+                    update: function() {
+                        node.scale.setScalar(originalScale.x * (1 + this.scale * 0.5));
+                    }
+                };
+                
+                const animate = () => {
+                    tl.scale = Math.sin(Date.now() * 0.01) * 0.5 + 0.5;
+                    tl.update();
+                    if (tl.scale > 0.1) {
+                        requestAnimationFrame(animate);
+                    } else {
+                        node.scale.copy(originalScale);
+                    }
+                };
+                animate();
+            }
+
+            resetCamera() {
+                this.camera.position.set(0, 5, 10);
+                this.cameraTarget.set(0, 0, 0);
+                this.autoRotate = false;
+            }
+
+            switchTheme(theme) {
+                this.currentTheme = theme;
+                const colors = this.themes[theme];
+                
+                // Update UI
+                document.querySelectorAll('.theme-btn').forEach(btn => btn.classList.remove('active'));
+                document.querySelector(`.theme-${theme}`).classList.add('active');
+                
+                // Update 3D scene colors
+                this.updateSceneColors(colors);
+            }
+
+            updateSceneColors(colors) {
+                const pointLight = this.scene.children.find(child => child.type === 'PointLight');
+                if (pointLight) {
+                    pointLight.color.setHex(colors.primary);
+                }
+
+                // Update materials based on current mode
+                if (this.currentMode === 'wave' && this.waveMesh) {
+                    this.waveMesh.material.uniforms.primaryColor.value.setHex(colors.primary);
+                    this.waveMesh.material.uniforms.secondaryColor.value.setHex(colors.secondary);
+                }
+                
+                if (this.currentMode === 'network' && this.nodes.length > 0) {
+                    this.nodes.forEach(node => {
+                        node.material.color.setHex(colors.primary);
+                        node.material.emissive.setHex(colors.secondary);
+                    });
+                    
+                    if (this.networkLines) {
+                        this.networkLines.material.color.setHex(colors.primary);
+                    }
+                }
+
+                if (this.currentMode === 'particle' && this.particleSystem) {
+                    // Update particle colors - recreate for immediate effect
+                    this.createParticleStorm();
+                }
+
+                if (this.currentMode === 'galaxy' && this.galaxy) {
+                    // Update galaxy colors - recreate for immediate effect
+                    this.createDataGalaxy();
+                }
+            }
+
+            onMouseMove(event) {
+                this.mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+                this.mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+                if (this.isMouseDown) {
+                    const deltaX = event.clientX - this.mouseDownPosition.x;
+                    const deltaY = event.clientY - this.mouseDownPosition.y;
+                    
+                    // Rotate camera around target
+                    const spherical = new THREE.Spherical();
+                    spherical.setFromVector3(this.camera.position.clone().sub(this.cameraTarget));
+                    spherical.theta -= deltaX * 0.01;
+                    spherical.phi += deltaY * 0.01;
+                    spherical.phi = Math.max(0.1, Math.min(Math.PI - 0.1, spherical.phi));
+                    
+                    this.camera.position.setFromSpherical(spherical).add(this.cameraTarget);
+                    this.camera.lookAt(this.cameraTarget);
+                    
+                    this.mouseDownPosition.x = event.clientX;
+                    this.mouseDownPosition.y = event.clientY;
+                }
+            }
+
+            switchMode(mode) {
+                this.currentMode = mode;
+                
+                // Update button states
+                document.querySelectorAll('.control-btn').forEach(btn => btn.classList.remove('active'));
+                document.getElementById(mode + 'Btn').classList.add('active');
+
+                // Switch visualization
+                switch(mode) {
+                    case 'wave':
+                        this.createWaveField();
+                        break;
+                    case 'particle':
+                        this.createParticleStorm();
+                        break;
+                    case 'network':
+                        this.createNeuralNetwork();
+                        break;
+                    case 'galaxy':
+                        this.createDataGalaxy();
+                        break;
+                }
+            }
+
+            onWindowResize() {
+                this.camera.aspect = window.innerWidth / window.innerHeight;
+                this.camera.updateProjectionMatrix();
+                this.renderer.setSize(window.innerWidth, window.innerHeight);
+            }
+
+            updateUI() {
+                if (this.currentMode === 'network') {
+                    document.getElementById('nodeCount').textContent = this.nodes.length;
+                    document.getElementById('connectionCount').textContent = Math.floor(Math.random() * 150 + 50);
+                    document.getElementById('dataFlow').textContent = (Math.random() * 100 + 50).toFixed(1) + ' MB/s';
+                    document.getElementById('networkLoad').textContent = Math.floor(Math.random() * 80 + 20) + '%';
+                    
+                    // Update labels for network mode
+                    document.querySelector('.data-item:nth-child(1) span:first-child').textContent = 'Active Nodes:';
+                    document.querySelector('.data-item:nth-child(2) span:first-child').textContent = 'Connections:';
+                    document.querySelector('.data-item:nth-child(3) span:first-child').textContent = 'Data Flow:';
+                    document.querySelector('.data-item:nth-child(4) span:first-child').textContent = 'Network Load:';
+                } else if (this.currentMode === 'particle') {
+                    document.getElementById('nodeCount').textContent = '5000';
+                    document.getElementById('connectionCount').textContent = Math.floor(Math.random() * 200 + 100);
+                    document.getElementById('dataFlow').textContent = (Math.random() * 200 + 100).toFixed(1) + ' MB/s';
+                    document.getElementById('networkLoad').textContent = Math.floor(Math.random() * 60 + 40) + '%';
+                    
+                    // Update labels for particle mode
+                    document.querySelector('.data-item:nth-child(1) span:first-child').textContent = 'Particles:';
+                    document.querySelector('.data-item:nth-child(2) span:first-child').textContent = 'Interactions:';
+                    document.querySelector('.data-item:nth-child(3) span:first-child').textContent = 'Energy Flow:';
+                    document.querySelector('.data-item:nth-child(4) span:first-child').textContent = 'System Load:';
+                } else if (this.currentMode === 'galaxy') {
+                    document.getElementById('nodeCount').textContent = '8000';
+                    document.getElementById('connectionCount').textContent = Math.floor(Math.random() * 50 + 25);
+                    document.getElementById('dataFlow').textContent = (Math.random() * 300 + 200).toFixed(1) + ' MB/s';
+                    document.getElementById('networkLoad').textContent = Math.floor(Math.random() * 90 + 30) + '%';
+                    
+                    // Update labels for galaxy mode
+                    document.querySelector('.data-item:nth-child(1) span:first-child').textContent = 'Stars:';
+                    document.querySelector('.data-item:nth-child(2) span:first-child').textContent = 'Clusters:';
+                    document.querySelector('.data-item:nth-child(3) span:first-child').textContent = 'Data Stream:';
+                    document.querySelector('.data-item:nth-child(4) span:first-child').textContent = 'Galaxy Load:';
+                } else if (this.currentMode === 'wave') {
+                    document.getElementById('nodeCount').textContent = '2500';
+                    document.getElementById('connectionCount').textContent = Math.floor(Math.random() * 80 + 40);
+                    document.getElementById('dataFlow').textContent = (Math.random() * 150 + 75).toFixed(1) + ' MB/s';
+                    document.getElementById('networkLoad').textContent = Math.floor(Math.random() * 70 + 25) + '%';
+                    
+                    // Update labels for wave mode
+                    document.querySelector('.data-item:nth-child(1) span:first-child').textContent = 'Grid Points:';
+                    document.querySelector('.data-item:nth-child(2) span:first-child').textContent = 'Oscillations:';
+                    document.querySelector('.data-item:nth-child(3) span:first-child').textContent = 'Wave Flow:';
+                    document.querySelector('.data-item:nth-child(4) span:first-child').textContent = 'Field Load:';
+                }
+            }
+
+            animate() {
+                requestAnimationFrame(() => this.animate());
+                
+                this.time += 0.01 * this.animationSpeed;
+
+                // Auto rotation
+                if (this.autoRotate) {
+                    const radius = this.camera.position.distanceTo(this.cameraTarget);
+                    this.camera.position.x = Math.cos(this.time * 0.2) * radius;
+                    this.camera.position.z = Math.sin(this.time * 0.2) * radius;
+                    this.camera.lookAt(this.cameraTarget);
+                }
+
+                // Update based on current mode
+                if (this.currentMode === 'wave' && this.waveMesh) {
+                    this.waveMesh.material.uniforms.time.value = this.time;
+                    this.waveMesh.material.uniforms.mouse.value = this.mouse;
+                }
+
+                if (this.currentMode === 'particle' && this.particleSystem) {
+                    this.particleSystem.material.uniforms.time.value = this.time;
+                    this.particleSystem.rotation.y += 0.001 * this.animationSpeed;
+                }
+
+                if (this.currentMode === 'network' && this.nodes.length > 0) {
+                    this.nodes.forEach((node, i) => {
+                        node.position.y += Math.sin(this.time + i) * 0.01 * this.animationSpeed;
+                        node.rotation.x += 0.01 * this.animationSpeed;
+                        node.rotation.y += 0.01 * this.animationSpeed;
+                    });
+                }
+
+                if (this.currentMode === 'galaxy' && this.galaxy) {
+                    this.galaxy.rotation.y += 0.002 * this.animationSpeed;
+                    this.galaxy.rotation.x = Math.sin(this.time * 0.5) * 0.1;
+                }
+
+                // Smooth camera movement when not manually controlling
+                if (!this.isMouseDown && !this.autoRotate) {
+                    this.camera.position.x += (this.mouse.x * 2 - this.camera.position.x) * 0.01;
+                    this.camera.position.y += (-this.mouse.y * 2 + 5 - this.camera.position.y) * 0.01;
+                    this.camera.lookAt(this.cameraTarget);
+                }
+
+                // Update UI periodically
+                if (Math.floor(this.time * 100) % 60 === 0) {
+                    this.updateUI();
+                }
+
+                this.renderer.render(this.scene, this.camera);
+            }
+        }
+
+        // Initialize the visualization
+        new DataVisualization();
+    </script>
+</body>
+</html>
